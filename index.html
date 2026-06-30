@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GHOST CATCH ONLINE</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&family=Zen+Kaku+Gothic+New:wght@500;700;900&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<style>
+  :root{
+    --bg:#0F1322;
+    --panel:#1B2138;
+    --panel-edge:#2A3152;
+    --ghost:#F2EDE3;
+    --sofa:#C7401F;
+    --book:#2D5C8A;
+    --bin:#3C8C5C;
+    --glow:#D9E86A;
+    --miss:#E2533D;
+    --ink:#EDEAE0;
+    --ink-dim:#9097B5;
+    --display:'Caveat', cursive;
+    --body:'Zen Kaku Gothic New', sans-serif;
+  }
+  *{ box-sizing:border-box; }
+  body{
+    margin:0;
+    min-height:100vh;
+    background:
+      radial-gradient(ellipse 900px 600px at 50% -10%, rgba(217,232,106,0.05), transparent 60%),
+      radial-gradient(ellipse 1200px 800px at 50% 50%, #161B30, var(--bg) 70%);
+    color:var(--ink);
+    font-family:var(--body);
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    padding:24px 16px 32px;
+    overflow-x:hidden;
+  }
+
+  .fog{ position:fixed; inset:0; pointer-events:none; z-index:0; opacity:0.5; }
+  .fog span{
+    position:absolute; border-radius:50%;
+    background:radial-gradient(circle, rgba(217,232,106,0.06), transparent 70%);
+    filter:blur(2px);
+    animation:drift 18s linear infinite;
+  }
+  @keyframes drift{
+    0%{ transform:translateY(0) translateX(0); }
+    50%{ transform:translateY(-30px) translateX(20px); }
+    100%{ transform:translateY(0) translateX(0); }
+  }
+
+  /* ===== HEADER ===== */
+  .topbar{
+    width:100%; max-width:920px;
+    display:flex; align-items:center; justify-content:space-between;
+    padding:6px 4px 18px; z-index:2;
+  }
+  .logo{
+    font-family:var(--display); font-size:2.4rem;
+    color:var(--glow); text-shadow:0 0 18px rgba(217,232,106,0.35); line-height:1;
+  }
+  .logo small{
+    display:block; font-family:var(--body); font-size:0.62rem;
+    letter-spacing:3px; color:var(--ink-dim); font-weight:700; margin-top:2px;
+  }
+  .meta{ display:flex; gap:18px; align-items:center; }
+  .meta .round{
+    font-size:0.78rem; color:var(--ink-dim); font-weight:700;
+    letter-spacing:1px; background:var(--panel); border:1px solid var(--panel-edge);
+    padding:6px 14px; border-radius:999px;
+  }
+  .meta .round b{ color:var(--ink); }
+
+  /* ===== LOBBY ===== */
+  .lobby{
+    z-index:2; width:100%; max-width:420px;
+    background:var(--panel); border:1px solid var(--panel-edge);
+    border-radius:20px; padding:28px 24px; margin-top:24px;
+    display:flex; flex-direction:column; gap:16px;
+  }
+  .lobby h2{
+    margin:0; font-family:var(--display); font-size:1.6rem; color:var(--glow);
+  }
+  .lobby p{ margin:0; font-size:0.82rem; color:var(--ink-dim); line-height:1.6; }
+  .lobby input{
+    width:100%; padding:12px 14px; border-radius:12px;
+    border:1px solid var(--panel-edge); background:#10142450; color:var(--ink);
+    font-size:1rem; letter-spacing:1px; font-weight:700;
+  }
+  .lobby input:focus{ outline:none; border-color:var(--glow); }
+  .lobby button{
+    padding:13px 14px; border-radius:12px; border:none; cursor:pointer;
+    background:var(--glow); color:#1B2138; font-weight:900; font-size:0.95rem;
+    transition:transform 0.1s ease;
+  }
+  .lobby button:hover{ transform:translateY(-1px); }
+  .lobby button:disabled{ opacity:0.5; cursor:default; transform:none; }
+  .lobby .status{ font-size:0.8rem; min-height:18px; color:var(--ink-dim); }
+  .lobby .status.err{ color:var(--miss); }
+  .lobby .status.ok{ color:var(--glow); }
+  .you-badge{
+    font-size:0.7rem; letter-spacing:1px; color:var(--ink-dim); font-weight:700;
+    background:#10142450; border:1px solid var(--panel-edge); border-radius:999px;
+    padding:5px 12px; align-self:flex-start;
+  }
+
+  /* ===== CARD ZONE ===== */
+  .stage{
+    position:relative; z-index:2; width:100%; max-width:560px;
+    display:flex; flex-direction:column; align-items:center; padding:28px 0 22px;
+  }
+  .card-deck-label{
+    font-size:0.7rem; letter-spacing:4px; color:var(--ink-dim);
+    font-weight:700; margin-bottom:14px;
+  }
+  .card{
+    width:240px; height:330px; position:relative;
+    perspective:1200px; cursor:pointer;
+  }
+  .card-inner{
+    width:100%; height:100%; position:relative;
+    transition:transform 0.5s cubic-bezier(.2,.8,.2,1);
+    transform-style:preserve-3d;
+  }
+  .card-inner.is-flipped{ transform:rotateY(180deg); }
+  .card-face{
+    position:absolute; inset:0; border-radius:18px; overflow:hidden;
+    backface-visibility:hidden; border:1px solid var(--panel-edge);
+    box-shadow:
+      0 0 0 1px rgba(255,255,255,0.02) inset,
+      0 30px 60px -20px rgba(0,0,0,0.7),
+      0 0 40px -10px rgba(217,232,106,0.08);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .card-back{ background:linear-gradient(160deg, #232A48, #161B30 70%); }
+  .card-front{
+    transform:rotateY(180deg);
+    background:linear-gradient(160deg, #232A48, #161B30 70%);
+  }
+
+  .card-back-decoration{
+    width:100%; height:100%;
+    display:flex; align-items:center; justify-content:center;
+    flex-direction:column; gap:12px;
+  }
+  .card-back-ghost{
+    font-size:5rem; opacity:0.15;
+    filter:drop-shadow(0 0 20px rgba(217,232,106,0.3));
+  }
+  .card-back-label{
+    font-family:var(--display); font-size:1.4rem; color:var(--glow);
+    opacity:0.25; letter-spacing:2px;
+  }
+  .card-back-border{
+    position:absolute; inset:12px; border-radius:12px;
+    border:1px solid rgba(217,232,106,0.08);
+  }
+
+  #cardCanvas{
+    width:100%; height:100%;
+    display:block; border-radius:18px;
+  }
+
+  .card-hint{
+    margin-top:14px; font-family:var(--display); font-size:1.1rem;
+    color:var(--glow); text-shadow:0 0 10px rgba(217,232,106,0.4);
+    opacity:0.9; animation:pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes pulse{
+    0%,100%{ opacity:0.55; }
+    50%{ opacity:1; }
+  }
+  .card-status{
+    margin-top:18px; height:28px; font-family:var(--display);
+    font-size:1.4rem; letter-spacing:0.5px; color:var(--ink-dim);
+  }
+  .card-status.correct{ color:var(--glow); text-shadow:0 0 12px rgba(217,232,106,0.5); }
+  .card-status.miss{ color:var(--miss); }
+
+  .card-info-badge{
+    position:absolute; bottom:10px; left:0; right:0;
+    display:flex; justify-content:center; gap:6px; flex-wrap:wrap; padding:0 8px;
+    pointer-events:none;
+  }
+  .badge{
+    font-size:0.6rem; font-weight:700; letter-spacing:0.5px;
+    padding:3px 8px; border-radius:999px;
+    border:1px solid rgba(255,255,255,0.2);
+    backdrop-filter:blur(4px);
+  }
+
+  /* ===== PLAYERS ROW ===== */
+  .players{
+    z-index:2; width:100%; max-width:920px;
+    display:grid; grid-template-columns:1fr 1fr;
+    gap:18px; margin-top:8px;
+  }
+  .player-panel{
+    background:var(--panel); border:1px solid var(--panel-edge);
+    border-radius:20px; padding:18px 16px 20px;
+    display:flex; flex-direction:column; gap:14px;
+    position:relative;
+  }
+  .player-panel.is-me{ border-color:var(--glow); box-shadow:0 0 0 1px var(--glow); }
+  .player-panel.not-me .pieces-row{ opacity:0.45; pointer-events:none; }
+  .player-head{
+    display:flex; align-items:center; justify-content:space-between;
+  }
+  .player-name{ font-weight:900; font-size:0.95rem; letter-spacing:0.5px; }
+  .player-panel.p1 .player-name{ color:var(--glow); }
+  .player-panel.p2 .player-name{ color:#8FD3FF; }
+  .player-score{ font-family:var(--display); font-size:1.6rem; color:var(--ink); }
+
+  .pieces-row{
+    display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:8px;
+  }
+  .piece-btn{
+    background:#10142450; border:1px solid var(--panel-edge);
+    border-radius:14px; padding:10px 4px 8px;
+    display:flex; flex-direction:column; align-items:center;
+    gap:6px; cursor:pointer;
+    transition:transform 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+    position:relative;
+  }
+  .piece-btn:hover{ transform:translateY(-2px); border-color:var(--ink-dim); }
+  .piece-btn:active{ transform:translateY(0px) scale(0.97); }
+
+  .piece-btn .swatch{
+    width:40px; height:40px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .piece-btn .swatch.c-white{ background:var(--ghost); }
+  .piece-btn .swatch.c-red{   background:var(--sofa); }
+  .piece-btn .swatch.c-blue{  background:var(--book); }
+  .piece-btn .swatch.c-green{ background:var(--bin);  }
+
+  .piece-btn .swatch img{
+    width:78%;
+    height:78%;
+    object-fit:contain;
+    filter:drop-shadow(0 1px 2px rgba(0,0,0,0.35));
+  }
+
+  .piece-btn .label{
+    font-size:0.6rem; color:var(--ink-dim); font-weight:700;
+  }
+  .piece-btn .key{
+    position:absolute; top:5px; right:5px;
+    font-family:var(--display); font-size:0.9rem; color:var(--ink-dim);
+    background:#0000003a; border-radius:5px;
+    width:18px; height:18px;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .piece-btn.flash-correct{
+    border-color:var(--glow);
+    box-shadow:0 0 0 1px var(--glow), 0 0 24px -4px rgba(217,232,106,0.6);
+  }
+  .piece-btn.flash-miss{
+    border-color:var(--miss);
+    animation:shake 0.3s ease;
+  }
+  @keyframes shake{
+    0%,100%{ transform:translateX(0); }
+    25%{ transform:translateX(-4px); }
+    75%{ transform:translateX(4px); }
+  }
+
+  .footer-hint{
+    z-index:2; margin-top:22px; font-size:0.72rem;
+    color:var(--ink-dim); letter-spacing:0.5px;
+    text-align:center; line-height:1.6;
+  }
+  .footer-hint b{ color:var(--ink); }
+
+  .hidden{ display:none !important; }
+
+  @media (max-width:680px){
+    .players{ grid-template-columns:1fr; }
+    .card{ width:200px; height:280px; }
+    .logo{ font-size:1.9rem; }
+    .pieces-row{ grid-template-columns:1fr 1fr; gap:6px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="fog" id="fog"></div>
+
+<div class="topbar">
+  <div class="logo">Ghost Catch<small>ONLINE 4-PIECE</small></div>
+  <div class="meta">
+    <div class="round hidden" id="deckLeftWrap">残り <b id="deckLeft">-</b> 枚</div>
+  </div>
+</div>
+
+<!-- ===================== ロビー ===================== -->
+<div class="lobby" id="lobby">
+  <h2>合言葉で対戦相手と合流</h2>
+  <p>同じ合言葉を入力した2人が自動でマッチングされます。先に入力した方がPlayer 1、後の方がPlayer 2になります。</p>
+  <input id="codeInput" type="text" maxlength="20" placeholder="例: yurei2026" autocomplete="off">
+  <button id="enterBtn">入室する</button>
+  <div class="status" id="lobbyStatus">&nbsp;</div>
+</div>
+
+<!-- ===================== ゲーム画面 ===================== -->
+<div id="gameScreen" class="hidden">
+
+  <div class="you-badge" id="youBadge" style="margin-bottom:10px;">YOU: -</div>
+
+  <div class="stage">
+    <div class="card-deck-label" id="waitingLabel">対戦相手を待っています…</div>
+    <div class="card" id="card">
+      <div class="card-inner" id="cardInner">
+
+        <div class="card-face card-back">
+          <div class="card-back-decoration">
+            <div class="card-back-ghost">👻</div>
+            <div class="card-back-label">GHOST CATCH</div>
+          </div>
+          <div class="card-back-border"></div>
+        </div>
+
+        <div class="card-face card-front">
+          <canvas id="cardCanvas" width="1024" height="1024"></canvas>
+          <div class="card-info-badge" id="cardBadge"></div>
+        </div>
+
+      </div>
+    </div>
+    <div class="card-hint" id="cardHint">Spaceキーでカードをめくる</div>
+    <div class="card-status" id="cardStatus">&nbsp;</div>
+  </div>
+
+  <div class="players">
+    <div class="player-panel p1" id="panel1">
+      <div class="player-head">
+        <div class="player-name">PLAYER 1</div>
+        <div class="player-score" id="score1">0</div>
+      </div>
+      <div class="pieces-row">
+        <div class="piece-btn" data-piece="ghost" data-player="1">
+          <span class="key">Q</span>
+          <div class="swatch c-white"><img src="images/ghost.png" alt="おばけ"></div>
+          <div class="label">おばけ</div>
+        </div>
+        <div class="piece-btn" data-piece="sofa" data-player="1">
+          <span class="key">W</span>
+          <div class="swatch c-red"><img src="images/sofa.png" alt="ソファ"></div>
+          <div class="label">ソファ</div>
+        </div>
+        <div class="piece-btn" data-piece="book" data-player="1">
+          <span class="key">E</span>
+          <div class="swatch c-blue"><img src="images/book.png" alt="本"></div>
+          <div class="label">本</div>
+        </div>
+        <div class="piece-btn" data-piece="bin" data-player="1">
+          <span class="key">R</span>
+          <div class="swatch c-green"><img src="images/bin.png" alt="ビン"></div>
+          <div class="label">ビン</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="player-panel p2" id="panel2">
+      <div class="player-head">
+        <div class="player-name">PLAYER 2</div>
+        <div class="player-score" id="score2">0</div>
+      </div>
+      <div class="pieces-row">
+        <div class="piece-btn" data-piece="ghost" data-player="2">
+          <span class="key">U</span>
+          <div class="swatch c-white"><img src="images/ghost.png" alt="おばけ"></div>
+          <div class="label">おばけ</div>
+        </div>
+        <div class="piece-btn" data-piece="sofa" data-player="2">
+          <span class="key">I</span>
+          <div class="swatch c-red"><img src="images/sofa.png" alt="ソファ"></div>
+          <div class="label">ソファ</div>
+        </div>
+        <div class="piece-btn" data-piece="book" data-player="2">
+          <span class="key">O</span>
+          <div class="swatch c-blue"><img src="images/book.png" alt="本"></div>
+          <div class="label">本</div>
+        </div>
+        <div class="piece-btn" data-piece="bin" data-player="2">
+          <span class="key">P</span>
+          <div class="swatch c-green"><img src="images/bin.png" alt="ビン"></div>
+          <div class="label">ビン</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer-hint">
+    <b>Space</b>または<b>カードをクリック</b>でめくる<br>
+    自分のキーボードショートカット: <b>P1</b>=Q/W/E/R　<b>P2</b>=U/I/O/P（自分の側のみ操作できます）<br>
+    正解判定はサーバー側で行われるため、同時押しでも公平です。
+  </div>
+
+</div>
+
+<script>
+// ================================================================
+// パレット・カード定義（index.html オリジナルと同一・同順）
+// ================================================================
+const PALETTE = {
+  白: { hex:'#F2EDE3' },
+  赤: { hex:'#C7401F' },
+  青: { hex:'#2D5C8A' },
+  緑: { hex:'#3C8C5C' },
+};
+const PIECE_LABEL = { ghost:'おばけ', sofa:'ソファ', book:'本', bin:'ビン' };
+
+const CARD_TABLE = [
+  { pair:['book','緑','bin','赤'],   answer:'ghost' },
+  { pair:['book','赤','bin','青'],   answer:'ghost' },
+  { pair:['bin','赤','sofa','青'],   answer:'ghost' },
+  { pair:['bin','青','sofa','緑'],   answer:'ghost' },
+  { pair:['book','緑','sofa','青'],  answer:'ghost' },
+  { pair:['book','赤','sofa','緑'],  answer:'ghost' },
+  { pair:['ghost','白','sofa','緑'],  answer:'ghost' },
+  { pair:['book','白','bin','青'],   answer:'sofa'  },
+  { pair:['book','緑','bin','白'],   answer:'sofa'  },
+  { pair:['bin','白','sofa','緑'],   answer:'book'  },
+  { pair:['bin','赤','sofa','白'],   answer:'book'  },
+  { pair:['book','白','sofa','青'],  answer:'bin'   },
+  { pair:['book','赤','sofa','白'],  answer:'bin'   },
+  { pair:['ghost','緑','sofa','白'], answer:'book'  },
+  { pair:['ghost','赤','sofa','緑'], answer:'book'  },
+  { pair:['ghost','青','sofa','白'], answer:'bin'   },
+  { pair:['ghost','赤','sofa','青'], answer:'bin'   },
+  { pair:['ghost','赤','bin','白'],  answer:'book'  },
+  { pair:['ghost','緑','bin','赤'],  answer:'book'  },
+  { pair:['ghost','青','bin','白'],  answer:'sofa'  },
+  { pair:['ghost','緑','bin','青'],  answer:'sofa'  },
+  { pair:['ghost','赤','book','白'], answer:'bin'   },
+  { pair:['ghost','青','book','赤'], answer:'bin'   },
+  { pair:['ghost','緑','book','白'], answer:'sofa'  },
+  { pair:['ghost','青','book','緑'], answer:'sofa'  },
+];
+
+// ================================================================
+// Canvas 色合成（オリジナルと同じロジック）
+// ================================================================
+const canvas = document.getElementById('cardCanvas');
+const ctx = canvas.getContext('2d');
+const W = 1024, H = 1024;
+
+const imgCache = {};
+function loadImage(src){
+  if(imgCache[src]) return imgCache[src];
+  const img = new Image();
+  img.src = src;
+  imgCache[src] = new Promise((res, rej)=>{
+    img.onload = ()=>res(img);
+    img.onerror = ()=>rej(new Error('load fail: '+src));
+  });
+  return imgCache[src];
+}
+
+async function renderCard(lineArtSrc, maskASrc, maskBSrc, colorAHex, colorBHex){
+  try {
+    const [lineImg, maskAImg, maskBImg] = await Promise.all([
+      loadImage(lineArtSrc), loadImage(maskASrc), loadImage(maskBSrc)
+    ]);
+    function paintMaskLayer(maskImg, hex){
+      const layer = document.createElement('canvas');
+      layer.width = W; layer.height = H;
+      const lctx = layer.getContext('2d');
+      lctx.drawImage(maskImg, 0, 0, W, H);
+      lctx.globalCompositeOperation = 'source-in';
+      lctx.fillStyle = hex;
+      lctx.fillRect(0, 0, W, H);
+      return layer;
+    }
+    const layerA = paintMaskLayer(maskAImg, colorAHex);
+    const layerB = paintMaskLayer(maskBImg, colorBHex);
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = '#1B2138';
+    ctx.fillRect(0, 0, W, H);
+    ctx.drawImage(layerA, 0, 0);
+    ctx.drawImage(layerB, 0, 0);
+    ctx.drawImage(lineImg, 0, 0, W, H);
+  } catch(e) {
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = '#1B2138';
+    ctx.fillRect(0, 0, W, H);
+    renderFallback(colorAHex, colorBHex);
+  }
+}
+
+function renderFallback(colorAHex, colorBHex){
+  const cx = W/2, cy = H/2;
+  const grad = ctx.createLinearGradient(0, 0, W, H);
+  grad.addColorStop(0, '#1B2138');
+  grad.addColorStop(1, '#0F1322');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W, H);
+  ctx.beginPath();
+  ctx.arc(cx - 180, cy, 200, 0, Math.PI*2);
+  ctx.fillStyle = colorAHex + 'CC';
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(cx + 180, cy, 200, 0, Math.PI*2);
+  ctx.fillStyle = colorBHex + 'CC';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.arc(cx - 180, cy, 200, 0, Math.PI*2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(cx + 180, cy, 200, 0, Math.PI*2);
+  ctx.stroke();
+}
+
+function paintCurrentCard(idx){
+  const current = CARD_TABLE[idx];
+  const [objA, colA_jp, objB, colB_jp] = current.pair;
+  const hexA = PALETTE[colA_jp].hex;
+  const hexB = PALETTE[colB_jp].hex;
+  const FILE_ORDER = {
+    'ghost-sofa':true, 'ghost-book':true, 'ghost-bin':true,
+    'sofa-book':true,  'sofa-bin':true,   'book-bin':true,
+  };
+  const fwdKey = `${objA}-${objB}`;
+  const [fileA, fileB, fileKey] = FILE_ORDER[fwdKey]
+    ? [objA, objB, fwdKey]
+    : [objB, objA, `${objB}-${objA}`];
+  const pairKey = `${fileKey}1`;
+  const lineArt = `assets/${pairKey}.png`;
+  const maskA   = `assets/${pairKey}__${fileA}.png`;
+  const maskB   = `assets/${pairKey}__${fileB}.png`;
+  const [resolvedHexA, resolvedHexB] = fileA === objA ? [hexA, hexB] : [hexB, hexA];
+  renderCard(lineArt, maskA, maskB, resolvedHexA, resolvedHexB);
+}
+
+// ================================================================
+// Supabase 接続
+// ================================================================
+const supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+
+let playerId = localStorage.getItem('gc_player_id');
+if(!playerId){
+  playerId = crypto.randomUUID();
+  localStorage.setItem('gc_player_id', playerId);
+}
+
+let room = null;       // 最新のルーム行
+let myPlayerNumber = null;
+let channel = null;
+let advanceTimer = null;
+let lastRoundToken = -1;
+
+const el = id => document.getElementById(id);
+const lobbyEl = el('lobby');
+const gameScreenEl = el('gameScreen');
+const lobbyStatusEl = el('lobbyStatus');
+const youBadgeEl = el('youBadge');
+const waitingLabelEl = el('waitingLabel');
+const deckLeftWrapEl = el('deckLeftWrap');
+const deckLeftEl = el('deckLeft');
+const cardInnerEl = el('cardInner');
+const cardHintEl = el('cardHint');
+const statusEl = el('cardStatus');
+const badgeEl = el('cardBadge');
+const score1El = el('score1');
+const score2El = el('score2');
+const panel1El = el('panel1');
+const panel2El = el('panel2');
+
+function setLobbyStatus(msg, cls){
+  lobbyStatusEl.textContent = msg;
+  lobbyStatusEl.className = 'status' + (cls ? ' ' + cls : '');
+}
+
+// ----------------------------------------------------------------
+// 入室処理
+// ----------------------------------------------------------------
+el('enterBtn').addEventListener('click', enterRoom);
+el('codeInput').addEventListener('keydown', (e)=>{ if(e.key === 'Enter') enterRoom(); });
+
+async function enterRoom(){
+  const code = el('codeInput').value.trim();
+  if(!code){ setLobbyStatus('合言葉を入力してください', 'err'); return; }
+  el('enterBtn').disabled = true;
+  setLobbyStatus('接続しています…');
+
+  const { data, error } = await supabase.rpc('join_or_create_room', {
+    p_code: code, p_player_id: playerId
+  });
+
+  if(error){
+    console.error(error);
+    setLobbyStatus('エラー: ' + error.message, 'err');
+    el('enterBtn').disabled = false;
+    return;
+  }
+
+  room = data;
+  myPlayerNumber = room.player1_id === playerId ? 1 : 2;
+  youBadgeEl.textContent = 'YOU: PLAYER ' + myPlayerNumber;
+
+  lobbyEl.classList.add('hidden');
+  gameScreenEl.classList.remove('hidden');
+  deckLeftWrapEl.classList.remove('hidden');
+
+  subscribeRoom(room.id);
+  applyRoomState(room);
+}
+
+// ----------------------------------------------------------------
+// Realtime 購読
+// ----------------------------------------------------------------
+function subscribeRoom(roomId){
+  if(channel) supabase.removeChannel(channel);
+  channel = supabase
+    .channel('room:' + roomId)
+    .on('postgres_changes',
+      { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `id=eq.${roomId}` },
+      (payload) => applyRoomState(payload.new)
+    )
+    .subscribe();
+}
+
+// ----------------------------------------------------------------
+// ルーム状態をUIに反映
+// ----------------------------------------------------------------
+function applyRoomState(newRoom){
+  const prev = room;
+  room = newRoom;
+
+  score1El.textContent = room.score_p1;
+  score2El.textContent = room.score_p2;
+  deckLeftEl.textContent = Math.max(0, (room.deck ? room.deck.length : 25) - room.deck_pos);
+
+  panel1El.classList.toggle('is-me', myPlayerNumber === 1);
+  panel1El.classList.toggle('not-me', myPlayerNumber !== 1);
+  panel2El.classList.toggle('is-me', myPlayerNumber === 2);
+  panel2El.classList.toggle('not-me', myPlayerNumber !== 2);
+
+  if(room.status === 'waiting'){
+    waitingLabelEl.textContent = '対戦相手を待っています…（合言葉「' + room.code + '」を伝えてください）';
+    cardHintEl.style.visibility = 'hidden';
+    return;
+  }
+
+  waitingLabelEl.textContent = 'めくられたカード';
+
+  // カードが新しいラウンドになった
+  if(prev === null || room.current_idx !== prev.current_idx || room.round_token !== lastRoundToken){
+    lastRoundToken = room.round_token;
+    cardInnerEl.classList.remove('is-flipped');
+    statusEl.textContent = '\u00A0';
+    statusEl.className = 'card-status';
+    badgeEl.innerHTML = '';
+    cardHintEl.style.visibility = 'visible';
+  }
+
+  // めくれている/いない
+  if(room.card_face === 'front'){
+    cardInnerEl.classList.add('is-flipped');
+    cardHintEl.style.visibility = 'hidden';
+    // 表面の絵はめくった時に一度だけ描画すればよい
+    if(prev === null || prev.card_face !== 'front' || prev.current_idx !== room.current_idx){
+      setTimeout(()=>paintCurrentCard(room.current_idx), 260);
+    }
+  }
+
+  // 勝敗確定
+  if(room.round_locked && room.winner){
+    statusEl.textContent = `Player ${room.winner} の勝ち！　正解：${PIECE_LABEL[answerOf(room.current_idx)]}`;
+    statusEl.className = 'card-status correct';
+
+    // 進行はホスト(Player1)のクライアントだけが担当（二重実行はDB側でも防御済み）
+    if(myPlayerNumber === 1){
+      if(advanceTimer) clearTimeout(advanceTimer);
+      advanceTimer = setTimeout(async ()=>{
+        await supabase.rpc('advance_round', { p_room_id: room.id });
+      }, 1200);
+    }
+  }
+}
+
+function answerOf(idx){
+  return CARD_TABLE[idx].answer;
+}
+
+// ----------------------------------------------------------------
+// 操作: めくる
+// ----------------------------------------------------------------
+async function revealCard(){
+  if(!room || room.status !== 'playing' || room.card_face === 'front') return;
+  await supabase.rpc('reveal_card', { p_room_id: room.id });
+}
+
+function flashPiece(player, piece, isCorrect){
+  const btn = document.querySelector(`.piece-btn[data-player="${player}"][data-piece="${piece}"]`);
+  if(!btn) return;
+  btn.classList.remove('flash-correct','flash-miss');
+  requestAnimationFrame(()=>{
+    btn.classList.add(isCorrect ? 'flash-correct' : 'flash-miss');
+    setTimeout(()=>btn.classList.remove('flash-correct','flash-miss'), 350);
+  });
+}
+
+// ----------------------------------------------------------------
+// 操作: 解答する（自分の側のみ）
+// ----------------------------------------------------------------
+async function handleGuess(player, piece){
+  if(!room || room.status !== 'playing') return;
+  const playerNum = parseInt(player, 10);
+  if(playerNum !== myPlayerNumber) return; // 自分の側だけ操作可
+  if(room.card_face !== 'front' || room.round_locked) return;
+
+  const { data, error } = await supabase.rpc('submit_guess', {
+    p_room_id: room.id, p_player_id: playerId, p_piece: piece
+  });
+  if(error){ console.error(error); return; }
+
+  if(data.result === 'win'){
+    flashPiece(player, piece, true);
+  } else if(data.result === 'miss'){
+    flashPiece(player, piece, false);
+    statusEl.textContent = 'ハズレ';
+    statusEl.className = 'card-status miss';
+    setTimeout(()=>{
+      if(!room.round_locked){
+        statusEl.textContent = '\u00A0';
+        statusEl.className = 'card-status';
+      }
+    }, 800);
+  }
+}
+
+// ================================================================
+// イベント
+// ================================================================
+document.querySelectorAll('.piece-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    handleGuess(btn.dataset.player, btn.dataset.piece);
+  });
+});
+
+const KEY_MAP = {
+  'q':[1,'ghost'], 'w':[1,'sofa'], 'e':[1,'book'], 'r':[1,'bin'],
+  'u':[2,'ghost'], 'i':[2,'sofa'], 'o':[2,'book'], 'p':[2,'bin'],
+};
+
+document.addEventListener('keydown', (e)=>{
+  if(gameScreenEl.classList.contains('hidden')) return;
+  if(e.code === 'Space' || e.key === ' '){
+    e.preventDefault();
+    revealCard();
+    return;
+  }
+  const k = e.key.toLowerCase();
+  if(KEY_MAP[k]){
+    const [player, piece] = KEY_MAP[k];
+    handleGuess(player, piece);
+  }
+});
+
+el('card').addEventListener('click', revealCard);
+
+// ================================================================
+// 背景パーティクル
+// ================================================================
+const fog = el('fog');
+for(let i=0;i<6;i++){
+  const s = document.createElement('span');
+  const size = 200 + Math.random()*300;
+  s.style.width = size+'px';
+  s.style.height = size+'px';
+  s.style.left = (Math.random()*100)+'%';
+  s.style.top = (Math.random()*100)+'%';
+  s.style.animationDelay = (Math.random()*10)+'s';
+  s.style.animationDuration = (14+Math.random()*10)+'s';
+  fog.appendChild(s);
+}
+</script>
+
+</body>
+</html>
