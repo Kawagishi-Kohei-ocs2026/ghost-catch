@@ -542,7 +542,7 @@ function paintCurrentCard(idx){
 // ================================================================
 // Supabase 接続
 // ================================================================
-const supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+const supabaseClient = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
 
 let playerId = localStorage.getItem('gc_player_id');
 if(!playerId){
@@ -590,7 +590,7 @@ async function enterRoom(){
   el('enterBtn').disabled = true;
   setLobbyStatus('接続しています…');
 
-  const { data, error } = await supabase.rpc('join_or_create_room', {
+  const { data, error } = await supabaseClient.rpc('join_or_create_room', {
     p_code: code, p_player_id: playerId
   });
 
@@ -617,8 +617,8 @@ async function enterRoom(){
 // Realtime 購読
 // ----------------------------------------------------------------
 function subscribeRoom(roomId){
-  if(channel) supabase.removeChannel(channel);
-  channel = supabase
+  if(channel) supabaseClient.removeChannel(channel);
+  channel = supabaseClient
     .channel('room:' + roomId)
     .on('postgres_changes',
       { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `id=eq.${roomId}` },
@@ -680,7 +680,7 @@ function applyRoomState(newRoom){
     if(myPlayerNumber === 1){
       if(advanceTimer) clearTimeout(advanceTimer);
       advanceTimer = setTimeout(async ()=>{
-        await supabase.rpc('advance_round', { p_room_id: room.id });
+        await supabaseClient.rpc('advance_round', { p_room_id: room.id });
       }, 1200);
     }
   }
@@ -695,7 +695,7 @@ function answerOf(idx){
 // ----------------------------------------------------------------
 async function revealCard(){
   if(!room || room.status !== 'playing' || room.card_face === 'front') return;
-  await supabase.rpc('reveal_card', { p_room_id: room.id });
+  await supabaseClient.rpc('reveal_card', { p_room_id: room.id });
 }
 
 function flashPiece(player, piece, isCorrect){
@@ -717,7 +717,7 @@ async function handleGuess(player, piece){
   if(playerNum !== myPlayerNumber) return; // 自分の側だけ操作可
   if(room.card_face !== 'front' || room.round_locked) return;
 
-  const { data, error } = await supabase.rpc('submit_guess', {
+  const { data, error } = await supabaseClient.rpc('submit_guess', {
     p_room_id: room.id, p_player_id: playerId, p_piece: piece
   });
   if(error){ console.error(error); return; }
